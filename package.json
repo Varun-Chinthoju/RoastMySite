@@ -1,0 +1,16 @@
+{
+  "name": "roastmysite",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "main.mjs",
+  "scripts": {
+    "dev": "electron .",
+    "start": "electron .",
+    "web": "node server.mjs",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "electron": "^38.8.6"
+  }
+}
