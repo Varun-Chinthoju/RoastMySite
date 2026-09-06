@@ -13,3 +13,14 @@ export function extractGeminiOutputText(response = {}) {
   }
   return null;
 }
+
+export function extractOpenRouterOutputText(response = {}) {
+  const content = response.choices?.[0]?.message?.content;
+  if (typeof content === 'string' && content.trim()) return content;
+  if (!Array.isArray(content)) return null;
+  for (const part of content) {
+    if (typeof part === 'string' && part.trim()) return part;
+    if (typeof part?.text === 'string' && part.text.trim()) return part.text;
+  }
+  return null;
+}

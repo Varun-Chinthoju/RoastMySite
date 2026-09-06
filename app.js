@@ -34,6 +34,7 @@ const icons = {
   accessibility: '<circle cx="12" cy="4" r="2"/><path d="M5 8h14"/><path d="m9 22 3-6 3 6"/><path d="M8 8 12 13l4-5"/>',
   wand: '<path d="m15 4 5 5L8 21l-5-5Z"/><path d="m6 3 1 2"/><path d="m3 6 2 1"/><path d="m18 13 1 2"/><path d="m21 16 2 1"/>',
   zap: '<path d="M13 2 3 14h9l-1 8 10-12h-9Z"/>',
+  command: '<path d="M18 8a4 4 0 1 0-4-4v12a4 4 0 1 0 4-4H6a4 4 0 1 0 4 4V8a4 4 0 1 0-4 4h12"/>',
 };
 
 function icon(name, size = 16) {
@@ -75,17 +76,24 @@ function render() {
 }
 
 function renderLanding() {
-  app.innerHTML = `<main class="landing-shell">
-    <nav class="top-nav">
+  app.innerHTML = `<main class="app-shell">
+    <header class="app-header">
       ${brand()}
-      <div class="nav-right"><span class="demo-pill">UX audit, not therapy</span>${modeToggle()}</div>
-    </nav>
-    <section class="hero">
-      <div class="eyebrow">${icon('scan', 14)} Screenshot + URL UX audits</div>
-      <h1>Your website has opinions.<br><span>So do we.</span></h1>
-      <p class="hero-copy">Drop in a screenshot and get a sharp, actionable audit across usability, accessibility, copy, hierarchy, and conversion.</p>
-      <div class="analysis-card">
-        <div class="input-label-row"><label for="site-url">Website URL <span>optional context</span></label><span class="privacy-note">No account required</span></div>
+      <div class="app-header-actions"><span class="app-status"><span class="status-dot"></span>Ready for a new audit</span>${modeToggle()}</div>
+    </header>
+    <section class="workspace">
+      <div class="workspace-heading">
+        <div>
+          <div class="eyebrow">${icon('scan', 14)} Audit workspace</div>
+          <h1>Start a new audit</h1>
+          <p>Review a site with concrete findings across usability, accessibility, copy, hierarchy, and conversion.</p>
+        </div>
+        <div class="workspace-shortcut">${icon('command', 14)} <span>Paste a URL or drop a screenshot</span></div>
+      </div>
+      <div class="workspace-grid">
+        <div class="analysis-card">
+          <div class="card-heading"><div><span class="card-kicker">Source</span><h2>What should we review?</h2></div><span class="privacy-note">Runs locally until analysis</span></div>
+          <div class="input-label-row"><label for="site-url">Website URL <span>optional context</span></label></div>
         <div class="url-input-wrap">${icon('link', 18)}<input id="site-url" value="${escapeAttr(state.url)}" placeholder="https://your-site.com" type="url"></div>
         <div class="or-divider"><span>and / or</span></div>
         <div id="drop-zone" class="drop-zone ${state.dragging ? 'dragging' : ''} ${state.preview ? 'has-preview' : ''}">
@@ -94,17 +102,26 @@ function renderLanding() {
         </div>
         ${state.error ? `<div class="inline-error">${icon('alert', 17)}<span>${escapeHtml(state.error)}</span></div>` : ''}
         <div class="action-row">
-          <button class="demo-link" id="demo-btn">See a sample audit ${icon('arrow', 15)}</button>
+          <button class="demo-link" id="demo-btn">Open sample audit ${icon('arrow', 15)}</button>
           <button class="primary-button" id="analyze-btn" ${state.file || state.url.trim() ? '' : 'disabled'}>${icon('flame', 18)} Roast My Site ${icon('arrow', 17)}</button>
         </div>
         <p class="url-caveat">URL capture runs in Electron’s Chromium. If a site blocks loading, upload a screenshot instead.</p>
       </div>
-      <div class="trust-row">
-        <span>${icon('check', 14)} Specific fixes</span><span>${icon('check', 14)} Severity-ranked</span><span>${icon('check', 14)} Rewritten copy</span><span>${icon('check', 14)} Accessibility confidence</span>
+        <aside class="workspace-side">
+          <div class="side-intro"><span class="side-icon">${icon('sparkles', 16)}</span><div><strong>What you’ll get</strong><p>A report you can actually work from.</p></div></div>
+          <div class="capability-list">
+            <div>${icon('alert', 15)}<span><strong>Priority-ranked findings</strong><small>Know what to fix first.</small></span></div>
+            <div>${icon('wand', 15)}<span><strong>Specific recommendations</strong><small>Turn criticism into next steps.</small></span></div>
+            <div>${icon('copy', 15)}<span><strong>Rewritten copy</strong><small>See clearer alternatives in context.</small></span></div>
+            <div>${icon('accessibility', 15)}<span><strong>Accessibility confidence</strong><small>Separate evidence from assumptions.</small></span></div>
+          </div>
+          <button class="sample-card" id="side-demo-btn"><span class="sample-preview"><span></span><span></span><span></span></span><span><strong>Not ready to upload?</strong><small>Explore a sample report</small></span>${icon('arrow', 15)}</button>
+        </aside>
       </div>
     </section>
   </main>`;
   bindLanding();
+  document.querySelector('#side-demo-btn').addEventListener('click', loadDemo);
 }
 
 function uploadMarkup() {

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AUDIT_SCHEMA, demoAudit, validateAuditShape } from './src/audit-schema.mjs';
 import { accessibilityError, buildDOMInspectionScript, computeScrollPositions, isBlockedPageData, normalizeWebsiteURL } from './src/capture-utils.mjs';
-import { extractGeminiOutputText } from './src/provider-utils.mjs';
+import { extractGeminiOutputText, extractOpenRouterOutputText } from './src/provider-utils.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CAPTURE_TIMEOUT_MS = 20_000;
@@ -161,7 +161,7 @@ async function captureWebsite(url) {
 
 function buildPrompt(mode, context) {
   const tone = mode === 'roast' ? 'Use light, witty sarcasm aimed only at the website; every joke must still communicate a concrete observation.' : 'Use a constructive, neutral, professional tone.';
-  return `You are a senior UX auditor. ${tone}\n\nAudit the supplied desktop and mobile screenshots and the programmatic page inspection below. Produce only the requested structured JSON. Never claim an issue that is not supported by the screenshots or inspection. Identify at least two things the site does well, with concrete evidence, so the owner does not accidentally remove effective patterns. The remakePrompt must be a self-contained prompt for another AI to rebuild this product experience: preserve the strengths, fix the highest-impact issues, retain the site's personality, and include responsive and accessibility requirements. If the source is an app or dashboard, explicitly preserve its app shell, navigation, workflows, and information-dense layout; do not turn it into a marketing landing page. Do not recommend removing a successful pattern unless you explain what should replace it. Keep redesignSuggestions.layout concise: include 1 to 5 concrete layout steps that are supported by the evidence.\n\nAccessibility evidence rules: use basis="programmatic" and confidence="confirmed" only for issues established by the DOM data (for example missing image alt attributes or unlabeled controls); use basis="visual" and confidence="likely" for visible visual risks; use basis="manual" and confidence="possible" for anything requiring keyboard, screen reader, exact color sampling, or other manual verification. Include the verification field for every accessibility finding.\n\n${JSON.stringify(context).slice(0, 120000)}`;
+  return `You are a senior UX auditor. ${tone}\n\nAudit the supplied desktop and mobile screenshots and the programmatic page inspection below. Produce only the requested structured JSON. Never claim an issue that is not supported by the screenshots or inspection. Identify at least two things the site does well, with concrete evidence, so the owner does not accidentally remove effective patterns. The remakePrompt must be a self-contained prompt for another AI to rebuild this product experience: preserve the strengths, fix the highest-impact issues, retain the site's personality, and include responsive and accessibility requirements. If the source is an app or dashboard, explicitly preserve its app shell, navigation, workflows, and information-dense layout; do not turn it into a marketing landing page. Do not recommend removing a successful pattern unless you explain what should replace it. Keep redesignSuggestions.layout concise: include 0 to 5 concrete layout steps; use an empty array only when no specific redesign sequence is justified by the evidence.\n\nAccessibility evidence rules: use basis="programmatic" and confidence="confirmed" only for issues established by the DOM data (for example missing image alt attributes or unlabeled controls); use basis="visual" and confidence="likely" for visible visual risks; use basis="manual" and confidence="possible" for anything requiring keyboard, screen reader, exact color sampling, or other manual verification. Include the verification field for every accessibility finding.\n\n${JSON.stringify(context).slice(0, 120000)}`;
 }
 
 async function analyzeWithOpenAI({ mode, url, screenshots, pageData }) {
@@ -173,6 +173,34 @@ async function analyzeWithOpenAI({ mode, url, screenshots, pageData }) {
   if (!response.ok) throw accessibilityError('The AI audit failed. Check the model configuration and try again.', 'AI_FAILED');
   const outputText = data.output_text || data.output?.flatMap((item) => item.content || []).find((part) => part.type === 'output_text')?.text;
   if (!outputText) throw accessibilityError('The AI returned no structured audit. Try again.', 'AI_INVALID');
+  try { return validateAuditShape(JSON.parse(outputText)); } catch (error) { throw accessibilityError(error.message, 'AI_INVALID'); }
+}
+
+async function analyzeWithOpenRouter({ mode, url, screenshots, pageData }) {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw accessibilityError('OpenRouter analysis is not configured on this computer. Set OPENROUTER_API_KEY, or choose another provider with AI_PROVIDER.', 'CONFIGURATION');
+  const content = [{ type: 'text', text: buildPrompt(mode, { url, pageData }) }];
+  for (const image of screenshots) content.push({ type: 'image_url', image_url: { url: image } });
+  const model = process.env.OPENROUTER_MODEL || 'openrouter/free';
+  const response = await withTimeout(fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://roastmysite.local',
+      'X-OpenRouter-Title': 'RoastMySite',
+    },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content }],
+      response_format: { type: 'json_schema', json_schema: { name: 'roastmysite_audit', strict: true, schema: AUDIT_SCHEMA } },
+      provider: { require_parameters: true },
+    }),
+  }), AI_TIMEOUT_MS, 'The OpenRouter audit timed out. Try again or use a smaller screenshot.');
+  const data = await response.json();
+  if (!response.ok) throw accessibilityError(`The OpenRouter audit failed: ${data.error?.message || 'check the model name and API key, then try again.'}`, 'AI_FAILED');
+  const outputText = extractOpenRouterOutputText(data);
+  if (!outputText) throw accessibilityError('OpenRouter returned no structured audit. Try again.', 'AI_INVALID');
   try { return validateAuditShape(JSON.parse(outputText)); } catch (error) { throw accessibilityError(error.message, 'AI_INVALID'); }
 }
 
@@ -201,10 +229,11 @@ async function analyzeWithGemini({ mode, url, screenshots, pageData }) {
 }
 
 async function analyzeWithModel(input) {
-  const provider = (process.env.AI_PROVIDER || (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY ? 'gemini' : 'openai')).toLowerCase();
+  const provider = (process.env.AI_PROVIDER || (process.env.OPENROUTER_API_KEY ? 'openrouter' : process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY ? 'gemini' : 'openai')).toLowerCase();
+  if (provider === 'openrouter') return analyzeWithOpenRouter(input);
   if (provider === 'gemini') return analyzeWithGemini(input);
   if (provider === 'openai') return analyzeWithOpenAI(input);
-  throw accessibilityError(`Unsupported AI_PROVIDER "${provider}". Use gemini or openai.`, 'CONFIGURATION');
+  throw accessibilityError(`Unsupported AI_PROVIDER "${provider}". Use openrouter, gemini, or openai.`, 'CONFIGURATION');
 }
 
 function toClientError(error) { return { code: error.code || 'AUDIT_FAILED', message: error.message || 'The audit failed. Upload a screenshot and try again.' }; }

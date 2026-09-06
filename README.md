@@ -15,7 +15,18 @@ npm run dev
 
 ## API key and model configuration
 
-Real URL or screenshot analysis uses the provider selected in the main process. Gemini is the default when `GEMINI_API_KEY` is present; OpenAI remains supported.
+Real URL or screenshot analysis uses the provider selected in the main process. OpenRouter is the default configuration and uses its free-model router; Gemini and OpenAI remain supported.
+
+For OpenRouter, create a local `.env` from `.env.example` and set your key:
+
+```bash
+export AI_PROVIDER=openrouter
+export OPENROUTER_API_KEY="your-key"
+export OPENROUTER_MODEL=openrouter/free # optional; routes to a compatible free model
+npm run dev
+```
+
+OpenRouter's free router selects from available free models and filters for request requirements such as image understanding and structured outputs. Free-model availability and rate limits can change.
 
 ```bash
 export OPENAI_API_KEY="your-key"
